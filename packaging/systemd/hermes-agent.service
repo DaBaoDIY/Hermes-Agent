@@ -1,0 +1,24 @@
+[Unit]
+Description=Hermes Agent Web UI and Bedrock bridge
+Documentation=https://docs.aws.amazon.com/bedrock/latest/userguide/inference-api.html
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/opt/hermes-agent
+Environment=HERMES_AGENT_CONFIG=/etc/hermes-agent/config.json
+Environment=HERMES_AGENT_TOKEN_FILE=/etc/hermes-agent/setup-token
+ExecStart=/opt/hermes-agent/.venv/bin/python -m hermes_agent --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/etc/hermes-agent /var/lib/hermes-agent
+
+[Install]
+WantedBy=multi-user.target

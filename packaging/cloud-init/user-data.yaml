@@ -1,0 +1,5 @@
+#cloud-config
+# Optional user data for launching a baked Hermes Agent AMI without Terraform.
+runcmd:
+  - [systemctl, enable, --now, hermes-agent-firstboot.service]
+final_message: "Hermes Agent first boot initialization completed."

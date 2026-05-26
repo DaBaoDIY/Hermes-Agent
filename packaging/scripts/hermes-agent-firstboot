@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_DIR=/etc/hermes-agent
+STATE_DIR=/var/lib/hermes-agent
+TOKEN_FILE="${CONFIG_DIR}/setup-token"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
+MOTD_FILE=/etc/motd.d/hermes-agent
+
+mkdir -p "${CONFIG_DIR}" "${STATE_DIR}" /etc/motd.d
+chown root:hermes "${CONFIG_DIR}" "${STATE_DIR}"
+chmod 0770 "${CONFIG_DIR}" "${STATE_DIR}"
+
+if [[ ! -s "${TOKEN_FILE}" ]]; then
+  umask 027
+  python3 -c 'import secrets; print(secrets.token_urlsafe(24))' > "${TOKEN_FILE}"
+fi
+chown root:hermes "${TOKEN_FILE}"
+chmod 0640 "${TOKEN_FILE}"
+
+detect_region() {
+  local token document region
+  token="$(curl -fsS -m 2 -X PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60" || true)"
+  if [[ -n "${token}" ]]; then
+    document="$(curl -fsS -m 2 -H "X-aws-ec2-metadata-token: ${token}" \
+      "http://169.254.169.254/latest/dynamic/instance-identity/document" || true)"
+  else
+    document="$(curl -fsS -m 2 "http://169.254.169.254/latest/dynamic/instance-identity/document" || true)"
+  fi
+  region="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("region",""))' <<< "${document}" 2>/dev/null || true)"
+  [[ -n "${region}" ]] && printf '%s' "${region}" || printf 'us-east-1'
+}
+
+if [[ ! -s "${CONFIG_FILE}" ]]; then
+  region="$(detect_region)"
+  cat > "${CONFIG_FILE}" << JSON
+{
+  "aws_region": "${region}",
+  "bind_host": "0.0.0.0",
+  "bind_port": 8080,
+  "initialized": false,
+  "max_tokens": 1024,
+  "metadata": {
+    "firstboot_region_detected": "${region}"
+  },
+  "model_id": "us.amazon.nova-lite-v1:0",
+  "reasoning_effort": "low",
+  "reasoning_enabled": false,
+  "system_prompt": "You are Hermes Agent, a helpful AI operations assistant.",
+  "temperature": 0.3,
+  "top_p": 0.9,
+  "ui_title": "Hermes Agent"
+}
+JSON
+fi
+chown root:hermes "${CONFIG_FILE}"
+chmod 0660 "${CONFIG_FILE}"
+
+cat > "${MOTD_FILE}" << MOTD
+Hermes Agent is installed.
+Web UI: http://<EC2_PUBLIC_IP>:8080
+Setup token: sudo cat ${TOKEN_FILE}
+Service: sudo systemctl status hermes-agent
+MOTD
+
+systemctl enable hermes-agent.service
+systemctl restart hermes-agent.service
+date -Is > "${STATE_DIR}/firstboot.done"

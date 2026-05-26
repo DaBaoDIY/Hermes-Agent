@@ -1,0 +1,13 @@
+[Unit]
+Description=Hermes Agent first boot initialization
+After=cloud-final.service network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/hermes-agent/firstboot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hermes-agent-firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

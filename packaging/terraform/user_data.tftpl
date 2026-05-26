@@ -1,0 +1,25 @@
+#cloud-config
+write_files:
+  - path: /etc/hermes-agent/config.json
+    owner: root:hermes
+    permissions: "0660"
+    content: |
+      {
+        "aws_region": "${aws_region}",
+        "bind_host": "0.0.0.0",
+        "bind_port": 8080,
+        "initialized": false,
+        "max_tokens": 1024,
+        "metadata": {
+          "provisioner": "terraform"
+        },
+        "model_id": "${model_id}",
+        "reasoning_effort": "low",
+        "reasoning_enabled": false,
+        "system_prompt": ${jsonencode(system_prompt)},
+        "temperature": 0.3,
+        "top_p": 0.9,
+        "ui_title": "Hermes Agent"
+      }
+runcmd:
+  - [systemctl, enable, --now, hermes-agent-firstboot.service]

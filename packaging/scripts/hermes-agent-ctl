@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-status}" in
+  status)
+    systemctl status hermes-agent --no-pager
+    ;;
+  token)
+    sudo cat /etc/hermes-agent/setup-token
+    ;;
+  config)
+    sudo cat /etc/hermes-agent/config.json
+    ;;
+  logs)
+    journalctl -u hermes-agent -f
+    ;;
+  restart)
+    sudo systemctl restart hermes-agent
+    ;;
+  *)
+    echo "Usage: hermes-agent-ctl [status|token|config|logs|restart]" >&2
+    exit 2
+    ;;
+esac
