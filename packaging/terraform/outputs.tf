@@ -7,7 +7,15 @@ output "public_ip" {
 }
 
 output "web_url" {
-  value = "http://${aws_instance.this.public_ip}:8080"
+  value = var.associate_public_ip_address ? "http://${aws_instance.this.public_ip}:8080" : null
+}
+
+output "api_gateway_url" {
+  value = var.enable_api_gateway ? aws_apigatewayv2_api.this[0].api_endpoint : null
+}
+
+output "nat_gateway_id" {
+  value = var.enable_nat_gateway ? aws_nat_gateway.this[0].id : null
 }
 
 output "setup_token_command" {

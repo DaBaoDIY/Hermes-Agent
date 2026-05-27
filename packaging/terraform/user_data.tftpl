@@ -6,16 +6,22 @@ write_files:
     content: |
       {
         "aws_region": "${aws_region}",
+        "base_url": "",
         "bind_host": "0.0.0.0",
         "bind_port": 8080,
+        "external_providers": [],
         "initialized": false,
         "max_tokens": 1024,
         "metadata": {
           "provisioner": "terraform"
         },
+        "mcp_servers": [],
         "model_id": "${model_id}",
+        "provider_label": "Amazon Bedrock",
+        "provider_type": "bedrock",
         "reasoning_effort": "low",
         "reasoning_enabled": false,
+        "skills": [],
         "system_prompt": ${jsonencode(system_prompt)},
         "temperature": 0.3,
         "top_p": 0.9,

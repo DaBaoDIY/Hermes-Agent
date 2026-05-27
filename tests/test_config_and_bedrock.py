@@ -51,3 +51,76 @@ def test_extract_text_joins_response_chunks():
     }
 
     assert extract_text(response) == "hello world"
+
+
+def test_external_provider_api_key_is_masked():
+    config = parse_config(
+        {
+            "provider_type": "openai-compatible",
+            "api_key": "sk-1234567890",
+            "external_providers": [
+                {
+                    "id": "deepseek",
+                    "label": "DeepSeek",
+                    "provider_type": "openai-compatible",
+                    "model_id": "deepseek-chat",
+                    "api_key": "sk-provider-secret",
+                }
+            ],
+        }
+    )
+
+    public = config.public_dict()
+
+    assert public["api_key"] == "********7890"
+    assert public["external_providers"][0]["api_key"] == "********cret"
+    assert public["external_providers"][0]["has_api_key"] is True
+
+
+def test_mcp_and_skill_runtime_manifests_include_enabled_items():
+    config = parse_config(
+        {
+            "mcp_servers": [
+                {
+                    "id": "filesystem",
+                    "label": "Filesystem",
+                    "transport": "stdio",
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+                    "env": {"SAFE": "true"},
+                    "enabled": True,
+                },
+                {
+                    "id": "disabled",
+                    "label": "Disabled",
+                    "transport": "http",
+                    "url": "https://mcp.example.com",
+                    "enabled": False,
+                },
+            ],
+            "skills": [
+                {
+                    "id": "native-mcp",
+                    "label": "Native MCP",
+                    "path": "mcp/native-mcp",
+                    "category": "MCP",
+                    "enabled": True,
+                }
+            ],
+        }
+    )
+
+    public = config.public_dict()
+
+    assert "filesystem" in public["mcp_runtime_config"]["mcp_servers"]
+    assert "disabled" not in public["mcp_runtime_config"]["mcp_servers"]
+    assert public["skills_manifest"] == [
+        {"id": "native-mcp", "label": "Native MCP", "path": "mcp/native-mcp", "category": "MCP"}
+    ]
+
+
+def test_public_config_exposes_aws_service_blueprint():
+    public = HermesConfig().public_dict()
+    service_ids = {item["id"] for item in public["aws_services"]}
+
+    assert {"bedrock", "iam", "api-gateway", "nat-gateway"}.issubset(service_ids)

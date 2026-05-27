@@ -31,6 +31,12 @@ variable "subnet_id" {
   description = "Public or private subnet ID for the EC2 instance."
 }
 
+variable "associate_public_ip_address" {
+  type        = bool
+  description = "Whether to associate a public IPv4 address with the Hermes EC2 instance."
+  default     = true
+}
+
 variable "key_name" {
   type        = string
   description = "Optional EC2 key pair name."
@@ -45,6 +51,42 @@ variable "allowed_web_cidr" {
 variable "allowed_ssh_cidr" {
   type        = string
   description = "CIDR allowed to SSH. Leave null to disable SSH ingress."
+  default     = null
+}
+
+variable "enable_api_gateway" {
+  type        = bool
+  description = "Create an optional Amazon API Gateway HTTP API through a VPC Link and internal Network Load Balancer."
+  default     = false
+}
+
+variable "api_gateway_vpc_link_subnet_ids" {
+  type        = list(string)
+  description = "Subnet IDs for the API Gateway VPC Link and internal Network Load Balancer. Defaults to subnet_id when empty."
+  default     = []
+}
+
+variable "api_gateway_allowed_origins" {
+  type        = list(string)
+  description = "CORS allowed origins for the optional API Gateway HTTP API."
+  default     = ["*"]
+}
+
+variable "enable_nat_gateway" {
+  type        = bool
+  description = "Create an optional NAT Gateway and default private route for private-subnet egress."
+  default     = false
+}
+
+variable "nat_public_subnet_id" {
+  type        = string
+  description = "Public subnet ID for the optional NAT Gateway. Required when enable_nat_gateway is true."
+  default     = null
+}
+
+variable "private_route_table_id" {
+  type        = string
+  description = "Private route table ID that should receive the NAT default route. Required when enable_nat_gateway is true."
   default     = null
 }
 

@@ -13,8 +13,8 @@ import sys
 import traceback
 
 from . import __version__
-from .bedrock import converse
 from .config import DEFAULT_CONFIG_PATH, HermesConfig, load_config, save_config
+from .providers import converse
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -70,17 +70,31 @@ class HermesHandler(BaseHTTPRequestHandler):
         self.serve_static()
 
     def do_PUT(self) -> None:
-        if self.path != "/api/config":
-            self.send_error_json(HTTPStatus.NOT_FOUND, "Route not found")
-            return
         if not self.authorized():
             return
-        payload = self.read_json()
-        current = self.state.load_config()
-        updated = current.update_from(payload)
-        updated.initialized = True
-        self.state.save_config(updated)
-        self.send_json(updated.public_dict())
+        if self.path == "/api/config":
+            payload = self.read_json()
+            current = self.state.load_config()
+            updated = current.update_from(payload)
+            updated.initialized = True
+            self.state.save_config(updated)
+            self.send_json(updated.public_dict())
+            return
+        if self.path == "/api/mcp":
+            payload = self.read_json()
+            current = self.state.load_config()
+            updated = current.update_from({"mcp_servers": payload.get("mcp_servers", [])})
+            self.state.save_config(updated)
+            self.send_json(updated.public_dict())
+            return
+        if self.path == "/api/skills":
+            payload = self.read_json()
+            current = self.state.load_config()
+            updated = current.update_from({"skills": payload.get("skills", [])})
+            self.state.save_config(updated)
+            self.send_json(updated.public_dict())
+            return
+        self.send_error_json(HTTPStatus.NOT_FOUND, "Route not found")
 
     def do_POST(self) -> None:
         if not self.authorized():
@@ -98,7 +112,45 @@ class HermesHandler(BaseHTTPRequestHandler):
             result = converse(self.state.load_config(), "Reply with a short readiness confirmation.")
             self.send_json(result)
             return
+        if self.path == "/api/providers/import":
+            try:
+                self.import_provider()
+            except ValueError as exc:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        if self.path == "/api/providers/use":
+            try:
+                self.use_provider()
+            except ValueError as exc:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            return
         self.send_error_json(HTTPStatus.NOT_FOUND, "Route not found")
+
+    def import_provider(self) -> None:
+        payload = self.read_json()
+        current = self.state.load_config()
+        provider = normalize_provider(payload)
+        providers = [item for item in current.external_providers if item.get("id") != provider["id"]]
+        providers.append(provider)
+        update: dict[str, Any] = {"external_providers": providers}
+        if payload.get("use_now", True):
+            update.update(active_provider_payload(provider))
+        updated = current.update_from(update)
+        updated.initialized = True
+        self.state.save_config(updated)
+        self.send_json(updated.public_dict())
+
+    def use_provider(self) -> None:
+        payload = self.read_json()
+        current = self.state.load_config()
+        provider_id = str(payload.get("id", "")).strip()
+        provider = next((item for item in current.external_providers if item.get("id") == provider_id), None)
+        if provider is None:
+            provider = normalize_provider(payload)
+        updated = current.update_from(active_provider_payload(provider))
+        updated.initialized = True
+        self.state.save_config(updated)
+        self.send_json(updated.public_dict())
 
     def authorized(self) -> bool:
         expected = self.state.token()
@@ -106,7 +158,7 @@ class HermesHandler(BaseHTTPRequestHandler):
             return True
         header = self.headers.get("X-Hermes-Token") or self.headers.get("Authorization") or ""
         supplied = header.removeprefix("Bearer ").strip()
-        if secrets.compare_digest(expected, supplied):
+        if expected and secrets.compare_digest(expected, supplied):
             return True
         self.send_error_json(HTTPStatus.UNAUTHORIZED, "Valid setup token is required")
         return False
@@ -124,9 +176,12 @@ class HermesHandler(BaseHTTPRequestHandler):
 
     def serve_static(self) -> None:
         relative = self.path.split("?", 1)[0].lstrip("/") or "index.html"
-        if relative.startswith("assets/"):
-            relative = relative.removeprefix("assets/")
-        target = (STATIC_DIR / relative).resolve()
+        target = self.resolve_static_target(relative)
+        if target is None:
+            if relative.startswith("assets/"):
+                self.send_error_json(HTTPStatus.NOT_FOUND, "Asset not found")
+                return
+            target = STATIC_DIR / "index.html"
         if STATIC_DIR.resolve() not in target.parents and target != STATIC_DIR.resolve():
             self.send_error_json(HTTPStatus.FORBIDDEN, "Forbidden")
             return
@@ -142,6 +197,15 @@ class HermesHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store" if target.name == "index.html" else "public, max-age=3600")
         self.end_headers()
         self.wfile.write(data)
+
+    def resolve_static_target(self, relative: str) -> Path | None:
+        candidates = [(STATIC_DIR / relative).resolve()]
+        if relative.startswith("assets/"):
+            candidates.append((STATIC_DIR / relative.removeprefix("assets/")).resolve())
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return None
 
     def send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -184,3 +248,44 @@ def main() -> None:
     httpd = HermesServer((host, port), HermesHandler, state)
     print(f"Hermes Agent {__version__} listening on http://{host}:{port}", flush=True)
     httpd.serve_forever()
+
+
+def normalize_provider(payload: dict[str, Any]) -> dict[str, Any]:
+    label = str(payload.get("label", payload.get("provider_label", "Custom Provider"))).strip()
+    provider_type = str(payload.get("provider_type", "openai-compatible")).strip()
+    model_id = str(payload.get("model_id", "")).strip()
+    provider_id = str(payload.get("id", "")).strip() or slugify(f"{provider_type}-{label}-{model_id}")
+    provider = {
+        "id": provider_id,
+        "label": label or provider_id,
+        "provider_type": provider_type,
+        "model_id": model_id,
+        "aws_region": str(payload.get("aws_region", "")).strip(),
+        "base_url": str(payload.get("base_url", "")).strip(),
+        "api_key": str(payload.get("api_key", "")).strip(),
+        "enabled": bool(payload.get("enabled", True)),
+    }
+    if not provider["model_id"]:
+        raise ValueError("model_id is required")
+    return provider
+
+
+def active_provider_payload(provider: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "provider_type": provider.get("provider_type", "openai-compatible"),
+        "provider_label": provider.get("label", "Custom Provider"),
+        "model_id": provider.get("model_id", ""),
+        "aws_region": provider.get("aws_region", ""),
+        "base_url": provider.get("base_url", ""),
+        "api_key": provider.get("api_key", ""),
+    }
+
+
+def slugify(value: str) -> str:
+    output = []
+    for char in value.lower():
+        if char.isalnum():
+            output.append(char)
+        elif output and output[-1] != "-":
+            output.append("-")
+    return "".join(output).strip("-")[:64] or secrets.token_hex(4)

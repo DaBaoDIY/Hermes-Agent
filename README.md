@@ -1,16 +1,29 @@
 # Hermes Agent on Rocky Linux EC2
 
-Hermes Agent 是一个部署在 Rocky Linux EC2 实例上的轻量级 Web UI 与 Amazon Bedrock 调用桥接服务。它会在实例本地保存运行配置，通过首次启动生成的 setup token 保护初始化入口，并使用 EC2 IAM Role 通过 AWS SDK 调用 Bedrock 托管模型，例如 Amazon Nova 系列模型。
+Hermes Agent 是一个部署在 Rocky Linux EC2 实例上的轻量级 Web UI 与多模型调用桥接服务。它会在实例本地保存运行配置，通过首次启动生成的 setup token 保护初始化入口，并支持通过 EC2 IAM Role 调用 Amazon Bedrock，也支持导入外部大模型服务的 API key。
 
 ## 架构说明
 
 本项目包含以下内容：
 
 - `hermes_agent/`：Hermes Agent 后端服务和 Web UI 静态页面。
+- `hermes_agent/providers.py`：Bedrock、OpenAI-compatible、Anthropic、Google Gemini 等模型连接器。
 - `packaging/scripts/install.sh`：在已有 Rocky Linux EC2 上安装 Hermes Agent。
 - `packaging/systemd/`：Hermes Agent 和首次启动初始化的 systemd 服务。
 - `packaging/packer/`：用于制作可复用 Rocky Linux AMI 的 Packer 模板。
 - `packaging/terraform/`：基于 AMI 一键启动 EC2、IAM Role、安全组和 user data 的 Terraform 示例。
+
+Web UI 使用 VSTECS 红蓝品牌色与液态玻璃风格，左上角显示 VSTECS 文字品牌标识，并包含深浅色切换、中英文切换、模型接入、MCP/Skills 能力中心和配置预览。
+
+当前推荐的 AWS 落地架构：
+
+- 计算层：Amazon EC2 运行 Rocky Linux、systemd 与 Hermes Agent Web UI。
+- AI 模型层：Amazon Bedrock 作为默认模型运行时，通过 Converse API 调用 Nova、Claude、DeepSeek、Kimi 等模型或 inference profile。
+- 身份权限层：EC2 Instance Profile + IAM 最小权限策略，默认不在 Web UI 中录入 AWS AK/SK。
+- 网络层：Security Group 控制 `8080` 和可选 `22` 入站；生产私有子网可通过 NAT Gateway 访问 Bedrock、公网模型 API 和远程 MCP endpoint。
+- 托管入口层：可选 Amazon API Gateway HTTP API + VPC Link + 内部 Network Load Balancer，统一暴露 HTTPS 入口并保留 setup token 认证。
+- 运维层：默认绑定 AWS Systems Manager Managed Instance Core，支持通过 SSM 获取 setup token、进入 Session Manager；后续可接入 CloudWatch Logs/Alarms。
+- 密钥层：外部模型 API key 当前保存在本机配置文件并脱敏展示；生产环境建议迁移到 AWS Secrets Manager。
 
 ## 在已有 Rocky Linux EC2 上安装
 
@@ -113,14 +126,49 @@ sudo hermes-agent-ctl status
 http://<EC2_PUBLIC_IP>:8080
 ```
 
-输入 setup token 后，在 Web UI 中配置：
+首次进入 Web UI 后，输入 setup token 即可进入控制台。Web UI 不再提供用户登录页。
+
+进入控制台后可配置：
 
 - `AWS Region`：Bedrock 模型所在 Region，例如 `us-east-1`。
 - `模型 ID`：例如 `us.amazon.nova-lite-v1:0`。
+- `提供商类型`：Amazon Bedrock、OpenAI Compatible、Anthropic API、Google Gemini API。
+- `Base URL`：外部 OpenAI-compatible API 的服务地址。
+- `API Key`：外部模型服务密钥，保存后 API 返回会脱敏显示。
 - `系统提示词`：Hermes Agent 的默认系统提示词。
 - `Temperature`、`Top P`、`Max tokens`：模型推理参数。
 
-保存配置后，点击 `测试 Bedrock` 验证模型调用是否成功。
+保存配置后，点击 `测试模型` 验证模型调用是否成功。
+
+聊天输入框支持按 `Enter` 直接发送消息，使用 `Shift + Enter` 输入换行。
+
+## 模型接入能力
+
+当前 Web UI 支持以下接入方式：
+
+- `Amazon Bedrock`：使用 EC2 IAM Role，无需在 Web UI 中录入 AWS AK/SK。
+- `OpenAI Compatible`：支持 OpenAI、OpenRouter、DeepSeek、Kimi、Together、vLLM、LM Studio 等兼容 `/v1/chat/completions` 的 API。
+- `Anthropic API`：支持 Anthropic Messages API。
+- `Google Gemini API`：支持 Gemini `generateContent` API。
+
+Bedrock 预置了 Nova、Claude、DeepSeek、Kimi、Gemma、OpenAI GPT OSS 等常用模型入口。不同 Region 的 Bedrock 模型 ID 和 inference profile ID 可能会变化，生产环境请以 Bedrock 控制台展示为准，也可以在 Web UI 中手动填写模型 ID。
+
+## MCP 与 Skills
+
+Web UI 已预置常用 MCP 和 skills 开关：
+
+- MCP：Filesystem、GitHub、PostgreSQL、Browser Automation、Remote HTTP MCP。
+- Skills：Native MCP、Systematic Debugging、Test Driven Development、Code Review、DSPy、Hugging Face Hub。
+
+MCP/Skills 页面提供“预置能力库 + 自定义接入 + 启用清单 + 配置预览”：
+
+- 预置 MCP：Filesystem、GitHub、Git、Fetch、Memory、Sequential Thinking、Time、PostgreSQL、SQLite、Brave Search、Playwright Browser、Puppeteer、Slack、Google Drive、AWS Docs、Remote HTTP MCP。
+- 自定义 MCP：支持 `stdio` 命令型 MCP，也支持远程 `http` MCP endpoint；可填写 args、env 或 headers。
+- 预置 Skills：Native MCP、Systematic Debugging、TDD、Code Review、Frontend UX、AWS Bedrock、Terraform IaC、Docker/Kubernetes、RAG、vLLM、DSPy、Hugging Face Hub、Documents、Spreadsheets、Presentations。
+- 自定义 Skill：可填写 label、path、category 和 description。
+- 配置预览：实时生成启用后的 `mcp_servers` 和 skills manifest，便于后续接入 Hermes Agent runtime。
+
+当前版本会保存 MCP/skills 配置，并生成 runtime 配置预览；下一阶段可以继续实现 MCP 子进程托管、OAuth、工具过滤和 skill 文件同步。
 
 ## 使用 SSH 隧道访问 Web UI
 
@@ -199,6 +247,50 @@ terraform apply \
 ```
 
 部署完成后，Terraform 会输出 Web UI 地址和获取 setup token 的 SSM 命令。
+
+### 可选：通过 API Gateway 暴露托管入口
+
+如果希望在生产环境使用托管 HTTP API 作为入口，可启用 API Gateway。Terraform 会创建：
+
+- Amazon API Gateway HTTP API。
+- API Gateway VPC Link。
+- 内部 Network Load Balancer。
+- 指向 EC2 `8080` 的 Target Group。
+- 允许 VPC 内 NLB 路径访问 Hermes Agent 的安全组规则。
+
+示例：
+
+```bash
+terraform apply \
+  -var aws_region=us-east-1 \
+  -var ami_id=ami-xxxxxxxxxxxxxxxxx \
+  -var vpc_id=vpc-xxxxxxxx \
+  -var subnet_id=subnet-xxxxxxxx \
+  -var allowed_web_cidr=<YOUR_PUBLIC_IP>/32 \
+  -var enable_api_gateway=true \
+  -var 'api_gateway_vpc_link_subnet_ids=["subnet-private-a","subnet-private-b"]'
+```
+
+部署完成后查看 `api_gateway_url` 输出。setup token 仍然通过 `X-Hermes-Token` 或 `Authorization: Bearer <token>` 传递。
+
+### 可选：私有子网 + NAT Gateway 出网
+
+当 EC2 放在私有子网时，可以关闭公网 IP，并通过 NAT Gateway 提供出站访问：
+
+```bash
+terraform apply \
+  -var aws_region=us-east-1 \
+  -var ami_id=ami-xxxxxxxxxxxxxxxxx \
+  -var vpc_id=vpc-xxxxxxxx \
+  -var subnet_id=subnet-private-a \
+  -var allowed_web_cidr=<YOUR_PUBLIC_IP>/32 \
+  -var associate_public_ip_address=false \
+  -var enable_nat_gateway=true \
+  -var nat_public_subnet_id=subnet-public-a \
+  -var private_route_table_id=rtb-private
+```
+
+这个模式适合配合 API Gateway、SSM Session Manager、VPC Endpoint 或堡垒机使用。若已经由平台团队统一提供 NAT Gateway，只需要把私有路由表指向现有 NAT，本示例的 `enable_nat_gateway` 可以保持 `false`。
 
 ## 常见问题
 
