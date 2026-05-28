@@ -1,0 +1,19 @@
+flowchart LR
+    User[Buyer Admin Browser] --> APIGW[Optional Amazon API Gateway HTTP API]
+    User --> SG[Security Group TCP 8080]
+    APIGW --> NLB[Internal Network Load Balancer]
+    NLB --> EC2[Amazon EC2 Rocky Linux\nHermes Agent Web UI]
+    SG --> EC2
+    EC2 --> IAM[EC2 IAM Role]
+    IAM --> Bedrock[Amazon Bedrock Converse API]
+    EC2 --> SSM[AWS Systems Manager]
+    EC2 --> CW[Amazon CloudWatch planned]
+    EC2 --> NAT[Optional NAT Gateway]
+    NAT --> MCP[External Model APIs / Remote MCP]
+
+    classDef core fill:#e8f1ff,stroke:#2f6bff,color:#0f1f3d
+    classDef optional fill:#fff7e5,stroke:#d48900,color:#3d2500
+    classDef security fill:#e9f9f1,stroke:#0f8f6d,color:#063d2c
+    class EC2,Bedrock,IAM,SSM core
+    class APIGW,NLB,NAT,CW,MCP optional
+    class SG security

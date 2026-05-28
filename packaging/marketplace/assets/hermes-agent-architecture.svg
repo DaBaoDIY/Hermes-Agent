@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="700" viewBox="0 0 1100 700" role="img" aria-labelledby="title desc">
+  <title id="title">Hermes Agent AWS Marketplace Architecture</title>
+  <desc id="desc">AWS Marketplace architecture for Hermes Agent on Rocky Linux with EC2, IAM, Amazon Bedrock, Systems Manager, optional API Gateway, NAT Gateway, and external MCP integrations.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#eef5ff"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+    <style>
+      .title{font:700 34px Arial,sans-serif;fill:#142033}
+      .label{font:700 18px Arial,sans-serif;fill:#142033}
+      .small{font:14px Arial,sans-serif;fill:#58677f}
+      .box{fill:#fff;stroke:#9db9e8;stroke-width:2;rx:10}
+      .core{fill:#e8f1ff;stroke:#2f6bff}
+      .security{fill:#e9f9f1;stroke:#0f8f6d}
+      .optional{fill:#fff7e5;stroke:#d48900}
+      .line{stroke:#34547d;stroke-width:3;fill:none;marker-end:url(#arrow)}
+      .dash{stroke-dasharray:8 8}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#34547d"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="700" fill="url(#bg)"/>
+  <text x="52" y="62" class="title">Hermes Agent on Rocky Linux - AWS Marketplace Architecture</text>
+  <text x="52" y="92" class="small">AMI with CloudFormation delivery, Bedrock via EC2 IAM Role, optional managed edge and private egress paths.</text>
+
+  <rect x="42" y="125" width="1016" height="500" fill="#f8fbff" stroke="#c9d8f2" stroke-width="2" rx="18"/>
+  <text x="70" y="160" class="label">Customer AWS Account / Region</text>
+
+  <rect x="77" y="205" width="180" height="86" class="box security"/>
+  <text x="105" y="238" class="label">Buyer Admin</text>
+  <text x="110" y="263" class="small">Browser / Token</text>
+
+  <rect x="325" y="185" width="205" height="90" class="box optional"/>
+  <text x="360" y="220" class="label">API Gateway</text>
+  <text x="355" y="245" class="small">Optional HTTPS front door</text>
+
+  <rect x="325" y="315" width="205" height="90" class="box security"/>
+  <text x="355" y="350" class="label">Security Group</text>
+  <text x="378" y="375" class="small">TCP 8080 / 22</text>
+
+  <rect x="585" y="185" width="205" height="90" class="box optional"/>
+  <text x="612" y="220" class="label">Internal NLB</text>
+  <text x="615" y="245" class="small">VPC Link target</text>
+
+  <rect x="585" y="315" width="205" height="112" class="box core"/>
+  <text x="627" y="352" class="label">Amazon EC2</text>
+  <text x="618" y="377" class="small">Rocky Linux + Hermes Agent</text>
+  <text x="635" y="399" class="small">systemd + setup token</text>
+
+  <rect x="850" y="205" width="170" height="86" class="box core"/>
+  <text x="895" y="238" class="label">IAM Role</text>
+  <text x="880" y="263" class="small">Least privilege</text>
+
+  <rect x="850" y="330" width="170" height="86" class="box core"/>
+  <text x="870" y="363" class="label">Amazon Bedrock</text>
+  <text x="887" y="388" class="small">Converse API</text>
+
+  <rect x="585" y="485" width="205" height="90" class="box core"/>
+  <text x="615" y="520" class="label">Systems Manager</text>
+  <text x="625" y="545" class="small">Token retrieval / Session</text>
+
+  <rect x="325" y="485" width="205" height="90" class="box optional"/>
+  <text x="365" y="520" class="label">NAT Gateway</text>
+  <text x="345" y="545" class="small">Optional private egress</text>
+
+  <path d="M257 248 H325" class="line"/>
+  <path d="M257 248 C290 248,292 360,325 360" class="line"/>
+  <path d="M530 230 H585" class="line"/>
+  <path d="M530 360 H585" class="line"/>
+  <path d="M790 371 H850" class="line"/>
+  <path d="M935 291 V330" class="line"/>
+  <path d="M688 427 V485" class="line"/>
+  <path d="M585 530 H530" class="line dash"/>
+  <path d="M427 485 V405" class="line dash"/>
+
+  <rect x="70" y="642" width="18" height="18" class="box core"/>
+  <text x="96" y="657" class="small">Core services</text>
+  <rect x="220" y="642" width="18" height="18" class="box optional"/>
+  <text x="246" y="657" class="small">Optional production path</text>
+  <rect x="455" y="642" width="18" height="18" class="box security"/>
+  <text x="481" y="657" class="small">Security boundary</text>
+</svg>

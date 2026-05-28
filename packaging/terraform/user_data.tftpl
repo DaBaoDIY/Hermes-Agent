@@ -13,7 +13,8 @@ write_files:
         "initialized": false,
         "max_tokens": 1024,
         "metadata": {
-          "provisioner": "terraform"
+          "provisioner": "terraform",
+          "prm_product_code": "${prm_product_code}"
         },
         "mcp_servers": [],
         "model_id": "${model_id}",
@@ -27,5 +28,12 @@ write_files:
         "top_p": 0.9,
         "ui_title": "Hermes Agent"
       }
+%{ if prm_product_code != "" ~}
+  - path: /etc/hermes-agent/aws-sdk.env
+    owner: root:hermes
+    permissions: "0640"
+    content: |
+      AWS_SDK_UA_APP_ID=APN_1.1/pc_${prm_product_code}$
+%{ endif ~}
 runcmd:
   - [systemctl, enable, --now, hermes-agent-firstboot.service]

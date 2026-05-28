@@ -41,6 +41,7 @@ source "amazon-ebs" "rocky" {
   instance_type = var.instance_type
   ssh_username  = "rocky"
   ami_name      = "${var.ami_name_prefix}-${local.timestamp}"
+  imds_support  = "v2.0"
 
   source_ami_filter {
     filters = {
@@ -57,6 +58,7 @@ source "amazon-ebs" "rocky" {
     device_name           = "/dev/sda1"
     volume_size           = 20
     volume_type           = "gp3"
+    encrypted             = false
     delete_on_termination = true
   }
 
@@ -80,7 +82,7 @@ build {
     inline = [
       "sudo bash /tmp/hermes-agent/packaging/scripts/install.sh /tmp/hermes-agent",
       "sudo systemctl enable hermes-agent-firstboot.service",
-      "sudo dnf clean all",
+      "sudo bash /tmp/hermes-agent/packaging/marketplace/scripts/ami-cleanup.sh",
       "sudo rm -rf /tmp/hermes-agent"
     ]
   }

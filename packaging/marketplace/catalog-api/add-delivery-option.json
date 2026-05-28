@@ -1,0 +1,71 @@
+[
+  {
+    "ChangeType": "AddRegions",
+    "ChangeName": "AddHermesRegions",
+    "Entity": {
+      "Type": "AmiProduct@1.0",
+      "Identifier": "prod-REPLACE_WITH_PRODUCT_ID"
+    },
+    "DetailsDocument": {
+      "Regions": [
+        "us-east-1"
+      ]
+    }
+  },
+  {
+    "ChangeType": "AddInstanceTypes",
+    "ChangeName": "AddHermesInstanceTypes",
+    "Entity": {
+      "Type": "AmiProduct@1.0",
+      "Identifier": "prod-REPLACE_WITH_PRODUCT_ID"
+    },
+    "DetailsDocument": {
+      "InstanceTypes": [
+        "t3.small",
+        "t3.medium",
+        "m6i.large"
+      ]
+    }
+  },
+  {
+    "ChangeType": "AddDeliveryOptions",
+    "ChangeName": "AddHermesCloudFormationDelivery",
+    "Entity": {
+      "Type": "AmiProduct@1.0",
+      "Identifier": "prod-REPLACE_WITH_PRODUCT_ID"
+    },
+    "DetailsDocument": {
+      "Version": {
+        "VersionTitle": "v1.0.0",
+        "ReleaseNotes": "Initial AWS Marketplace release of Hermes Agent on Rocky Linux."
+      },
+      "DeliveryOptions": [
+        {
+          "DeliveryOptionTitle": "CloudFormation deployment",
+          "Details": {
+            "DeploymentTemplateDeliveryOptionDetails": {
+              "ShortDescription": "Deploy Hermes Agent on Rocky Linux with Amazon Bedrock IAM access.",
+              "LongDescription": "This CloudFormation template deploys Hermes Agent on Amazon EC2 with a dedicated VPC, public subnet, security group, IAM role, instance profile, and Systems Manager access. Hermes Agent uses the EC2 IAM role to call Amazon Bedrock and generates a unique setup token on first boot.",
+              "UsageInstructions": "After the stack reaches CREATE_COMPLETE, open the WebUrl output and retrieve the setup token with the SetupTokenCommand output.",
+              "RecommendedInstanceType": "t3.small",
+              "ArchitectureDiagram": "https://REPLACE_WITH_BUCKET.s3.amazonaws.com/assets/hermes-agent-architecture.png",
+              "Template": "https://REPLACE_WITH_BUCKET.s3.amazonaws.com/cloudformation/hermes-agent-marketplace.yaml",
+              "TemplateSources": [
+                {
+                  "ParameterName": "AmiId",
+                  "AmiSource": {
+                    "AmiId": "ami-REPLACE_WITH_US_EAST_1_AMI",
+                    "AccessRoleArn": "arn:aws:iam::REPLACE_WITH_SELLER_ACCOUNT:role/AwsMarketplaceAmiIngestion",
+                    "UserName": "rocky",
+                    "OperatingSystemName": "CENTOS",
+                    "OperatingSystemVersion": "Rocky Linux 9 x86_64"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+]

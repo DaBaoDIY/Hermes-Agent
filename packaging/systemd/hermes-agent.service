@@ -11,6 +11,7 @@ Group=hermes
 WorkingDirectory=/opt/hermes-agent
 Environment=HERMES_AGENT_CONFIG=/etc/hermes-agent/config.json
 Environment=HERMES_AGENT_TOKEN_FILE=/etc/hermes-agent/setup-token
+EnvironmentFile=-/etc/hermes-agent/aws-sdk.env
 ExecStart=/opt/hermes-agent/.venv/bin/python -m hermes_agent --host 0.0.0.0 --port 8080
 Restart=on-failure
 RestartSec=5

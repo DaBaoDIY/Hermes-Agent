@@ -101,3 +101,9 @@ variable "system_prompt" {
   description = "Default system prompt for Hermes Agent."
   default     = "You are Hermes Agent, a helpful AI operations assistant."
 }
+
+variable "prm_product_code" {
+  type        = string
+  description = "Optional AWS Marketplace product code for PRM. Leave empty before Marketplace assigns a product code."
+  default     = ""
+}

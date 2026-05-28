@@ -10,6 +10,13 @@ data "aws_vpc" "selected" {
 
 locals {
   api_gateway_vpc_link_subnet_ids = length(var.api_gateway_vpc_link_subnet_ids) > 0 ? var.api_gateway_vpc_link_subnet_ids : [var.subnet_id]
+  prm_tags                        = var.prm_product_code == "" ? {} : { "aws-apn-id" = "pc:${var.prm_product_code}" }
+  common_tags = merge(
+    {
+      Application = "Hermes Agent"
+    },
+    local.prm_tags
+  )
 }
 
 resource "aws_iam_role" "this" {
@@ -27,6 +34,8 @@ resource "aws_iam_role" "this" {
       }
     ]
   })
+
+  tags = merge(local.common_tags, { Name = "${var.name}-ec2-role" })
 }
 
 resource "aws_iam_role_policy" "bedrock" {
@@ -107,6 +116,8 @@ resource "aws_security_group" "this" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = merge(local.common_tags, { Name = "${var.name}-sg" })
 }
 
 resource "aws_security_group" "api_gateway_vpc_link" {
@@ -123,10 +134,7 @@ resource "aws_security_group" "api_gateway_vpc_link" {
     cidr_blocks = [data.aws_vpc.selected.cidr_block]
   }
 
-  tags = {
-    Name        = "${var.name}-apigw-vpc-link-sg"
-    Application = "Hermes Agent"
-  }
+  tags = merge(local.common_tags, { Name = "${var.name}-apigw-vpc-link-sg" })
 }
 
 resource "aws_instance" "this" {
@@ -140,9 +148,10 @@ resource "aws_instance" "this" {
   user_data_replace_on_change = true
 
   user_data = templatefile("${path.module}/user_data.tftpl", {
-    aws_region    = var.aws_region
-    model_id      = var.model_id
-    system_prompt = var.system_prompt
+    aws_region       = var.aws_region
+    model_id         = var.model_id
+    prm_product_code = var.prm_product_code
+    system_prompt    = var.system_prompt
   })
 
   metadata_options {
@@ -155,10 +164,7 @@ resource "aws_instance" "this" {
     volume_type = "gp3"
   }
 
-  tags = {
-    Name        = var.name
-    Application = "Hermes Agent"
-  }
+  tags = merge(local.common_tags, { Name = var.name })
 }
 
 resource "aws_lb" "api" {
@@ -168,10 +174,7 @@ resource "aws_lb" "api" {
   load_balancer_type = "network"
   subnets            = local.api_gateway_vpc_link_subnet_ids
 
-  tags = {
-    Name        = "${var.name}-nlb"
-    Application = "Hermes Agent"
-  }
+  tags = merge(local.common_tags, { Name = "${var.name}-nlb" })
 }
 
 resource "aws_lb_target_group" "api" {
@@ -188,10 +191,7 @@ resource "aws_lb_target_group" "api" {
     path     = "/api/health"
   }
 
-  tags = {
-    Name        = "${var.name}-tg"
-    Application = "Hermes Agent"
-  }
+  tags = merge(local.common_tags, { Name = "${var.name}-tg" })
 }
 
 resource "aws_lb_target_group_attachment" "api" {
@@ -261,10 +261,7 @@ resource "aws_eip" "nat" {
   count  = var.enable_nat_gateway ? 1 : 0
   domain = "vpc"
 
-  tags = {
-    Name        = "${var.name}-nat-eip"
-    Application = "Hermes Agent"
-  }
+  tags = merge(local.common_tags, { Name = "${var.name}-nat-eip" })
 }
 
 resource "aws_nat_gateway" "this" {
@@ -272,10 +269,7 @@ resource "aws_nat_gateway" "this" {
   allocation_id = aws_eip.nat[0].id
   subnet_id     = var.nat_public_subnet_id
 
-  tags = {
-    Name        = "${var.name}-nat"
-    Application = "Hermes Agent"
-  }
+  tags = merge(local.common_tags, { Name = "${var.name}-nat" })
 }
 
 resource "aws_route" "private_nat" {

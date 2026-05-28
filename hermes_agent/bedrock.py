@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 
 from .config import HermesConfig
 
@@ -49,15 +50,23 @@ def converse(config: HermesConfig, user_text: str) -> dict[str, Any]:
     except ImportError as exc:
         raise BedrockUnavailable("boto3 is not installed in this environment") from exc
 
-    client = boto3.client(
-        "bedrock-runtime",
-        region_name=config.aws_region,
-        config=Config(
-            connect_timeout=60,
-            read_timeout=3600,
-            retries={"max_attempts": 2, "mode": "standard"},
-        ),
-    )
+    config_kwargs: dict[str, Any] = {
+        "connect_timeout": 60,
+        "read_timeout": 3600,
+        "retries": {"max_attempts": 2, "mode": "standard"},
+    }
+    app_id = os.environ.get("AWS_SDK_UA_APP_ID", "").strip()
+    if app_id:
+        config_kwargs["user_agent_appid"] = app_id
+    try:
+        client_config = Config(**config_kwargs)
+    except TypeError:
+        config_kwargs.pop("user_agent_appid", None)
+        if app_id:
+            config_kwargs["user_agent_extra"] = app_id
+        client_config = Config(**config_kwargs)
+
+    client = boto3.client("bedrock-runtime", region_name=config.aws_region, config=client_config)
     request = build_converse_request(config, user_text)
     response = client.converse(**request)
     return {

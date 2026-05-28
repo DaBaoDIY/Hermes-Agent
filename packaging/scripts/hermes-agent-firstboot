@@ -20,13 +20,14 @@ chmod 0640 "${TOKEN_FILE}"
 
 detect_region() {
   local token document region
-  token="$(curl -fsS -m 2 -X PUT "http://169.254.169.254/latest/api/token" \
-    -H "X-aws-ec2-metadata-token-ttl-seconds: 60" || true)"
+  token="$(wget -q -T 2 -O - --method=PUT \
+    --header="X-aws-ec2-metadata-token-ttl-seconds: 60" \
+    "http://169.254.169.254/latest/api/token" || true)"
   if [[ -n "${token}" ]]; then
-    document="$(curl -fsS -m 2 -H "X-aws-ec2-metadata-token: ${token}" \
+    document="$(wget -q -T 2 -O - --header="X-aws-ec2-metadata-token: ${token}" \
       "http://169.254.169.254/latest/dynamic/instance-identity/document" || true)"
   else
-    document="$(curl -fsS -m 2 "http://169.254.169.254/latest/dynamic/instance-identity/document" || true)"
+    document="$(wget -q -T 2 -O - "http://169.254.169.254/latest/dynamic/instance-identity/document" || true)"
   fi
   region="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("region",""))' <<< "${document}" 2>/dev/null || true)"
   [[ -n "${region}" ]] && printf '%s' "${region}" || printf 'us-east-1'

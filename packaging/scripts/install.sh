@@ -6,7 +6,7 @@ INSTALL_DIR=/opt/hermes-agent
 CONFIG_DIR=/etc/hermes-agent
 STATE_DIR=/var/lib/hermes-agent
 
-dnf install -y python3 python3-pip curl rsync shadow-utils policycoreutils-python-utils
+dnf install -y python3 python3-pip wget rsync shadow-utils policycoreutils-python-utils
 
 if ! getent group hermes >/dev/null; then
   groupadd --system hermes

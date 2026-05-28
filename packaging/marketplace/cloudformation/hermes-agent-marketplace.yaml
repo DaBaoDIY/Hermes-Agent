@@ -1,0 +1,374 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Hermes Agent on Rocky Linux - AWS Marketplace CloudFormation delivery template"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Marketplace AMI
+        Parameters:
+          - AmiId
+          - ProductCode
+      - Label:
+          default: Network and access
+        Parameters:
+          - AvailabilityZone
+          - VpcCidr
+          - PublicSubnetCidr
+          - AllowedWebCidr
+          - AllowedSshCidr
+          - KeyName
+      - Label:
+          default: Hermes Agent runtime
+        Parameters:
+          - InstanceType
+          - BedrockModelId
+          - SystemPrompt
+    ParameterLabels:
+      AmiId:
+        default: AMI ID
+      ProductCode:
+        default: AWS Marketplace Product Code
+      AllowedWebCidr:
+        default: Web UI allowed CIDR
+      AllowedSshCidr:
+        default: SSH allowed CIDR
+
+Parameters:
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0000000000000000
+    Description: "AMI ID managed by AWS Marketplace. Do not modify after publication."
+
+  ProductCode:
+    Type: String
+    Default: ""
+    Description: "Optional Marketplace product code for PRM, for example 49kmrspbt15fr9of1bvxrsq4y."
+
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.small
+      - t3.medium
+      - t3.large
+      - m6i.large
+      - m6i.xlarge
+      - c6i.large
+      - c6i.xlarge
+    Description: "EC2 instance type for Hermes Agent."
+
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: "Availability Zone for the public subnet and EC2 instance."
+
+  VpcCidr:
+    Type: String
+    Default: 10.64.0.0/16
+    Description: "CIDR block for the dedicated Hermes Agent VPC."
+
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.64.1.0/24
+    Description: "CIDR block for the public subnet."
+
+  AllowedWebCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: "CIDR allowed to access the Hermes Agent Web UI on TCP 8080. Restrict this in production."
+
+  AllowedSshCidr:
+    Type: String
+    Default: ""
+    Description: "Optional CIDR allowed to SSH on TCP 22. Leave empty to disable SSH ingress."
+
+  KeyName:
+    Type: String
+    Default: ""
+    Description: "Optional EC2 key pair name. Session Manager is enabled by default."
+
+  BedrockModelId:
+    Type: String
+    Default: us.amazon.nova-lite-v1:0
+    Description: "Default Amazon Bedrock model ID or inference profile ID."
+
+  SystemPrompt:
+    Type: String
+    Default: "You are Hermes Agent, a helpful AI operations assistant."
+    AllowedPattern: '^[^$]*$'
+    Description: "Default system prompt for Hermes Agent."
+
+Conditions:
+  HasSshIngress: !Not [!Equals [!Ref AllowedSshCidr, ""]]
+  HasKeyName: !Not [!Equals [!Ref KeyName, ""]]
+  HasProductCode: !Not [!Equals [!Ref ProductCode, ""]]
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+        - Key: Application
+          Value: Hermes Agent
+        - !If
+          - HasProductCode
+          - Key: aws-apn-id
+            Value: !Sub "pc:${ProductCode}"
+          - !Ref AWS::NoValue
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+        - Key: Application
+          Value: Hermes Agent
+        - !If
+          - HasProductCode
+          - Key: aws-apn-id
+            Value: !Sub "pc:${ProductCode}"
+          - !Ref AWS::NoValue
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-subnet"
+        - Key: Application
+          Value: Hermes Agent
+        - !If
+          - HasProductCode
+          - Key: aws-apn-id
+            Value: !Sub "pc:${ProductCode}"
+          - !Ref AWS::NoValue
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-rtb"
+        - Key: Application
+          Value: Hermes Agent
+        - !If
+          - HasProductCode
+          - Key: aws-apn-id
+            Value: !Sub "pc:${ProductCode}"
+          - !Ref AWS::NoValue
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  HermesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Hermes Agent Web UI access
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: Hermes Agent Web UI
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref AllowedWebCidr
+        - !If
+          - HasSshIngress
+          - Description: SSH
+            IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: !Ref AllowedSshCidr
+          - !Ref AWS::NoValue
+      SecurityGroupEgress:
+        - Description: Outbound
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg"
+        - Key: Application
+          Value: Hermes Agent
+        - !If
+          - HasProductCode
+          - Key: aws-apn-id
+            Value: !Sub "pc:${ProductCode}"
+          - !Ref AWS::NoValue
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: HermesAgentBedrock
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                  - bedrock:Converse
+                  - bedrock:ConverseStream
+                  - bedrock:ListFoundationModels
+                  - bedrock:GetFoundationModel
+                  - bedrock:ListInferenceProfiles
+                  - bedrock:GetInferenceProfile
+                Resource: "*"
+      Tags:
+        - Key: Application
+          Value: Hermes Agent
+        - !If
+          - HasProductCode
+          - Key: aws-apn-id
+            Value: !Sub "pc:${ProductCode}"
+          - !Ref AWS::NoValue
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  HermesInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      KeyName: !If
+        - HasKeyName
+        - !Ref KeyName
+        - !Ref AWS::NoValue
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref HermesSecurityGroup
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+
+          install -d -m 0770 -o root -g hermes /etc/hermes-agent
+
+          HERMES_SYSTEM_PROMPT=$(cat <<'HERMES_PROMPT'
+          ${SystemPrompt}
+          HERMES_PROMPT
+          )
+          export HERMES_SYSTEM_PROMPT
+          export HERMES_REGION='${AWS::Region}'
+          export HERMES_MODEL_ID='${BedrockModelId}'
+          export HERMES_PRODUCT_CODE='${ProductCode}'
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "aws_region": os.environ["HERMES_REGION"],
+              "base_url": "",
+              "bind_host": "0.0.0.0",
+              "bind_port": 8080,
+              "external_providers": [],
+              "initialized": False,
+              "max_tokens": 1024,
+              "metadata": {
+                  "provisioner": "aws-marketplace-cloudformation",
+                  "prm_product_code": os.environ.get("HERMES_PRODUCT_CODE", ""),
+              },
+              "mcp_servers": [],
+              "model_id": os.environ["HERMES_MODEL_ID"],
+              "provider_label": "Amazon Bedrock",
+              "provider_type": "bedrock",
+              "reasoning_effort": "low",
+              "reasoning_enabled": False,
+              "skills": [],
+              "system_prompt": os.environ["HERMES_SYSTEM_PROMPT"].strip(),
+              "temperature": 0.3,
+              "top_p": 0.9,
+              "ui_title": "Hermes Agent",
+          }
+
+          Path("/etc/hermes-agent/config.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          PY
+
+          chown root:hermes /etc/hermes-agent/config.json
+          chmod 0660 /etc/hermes-agent/config.json
+
+          if [ -n "$HERMES_PRODUCT_CODE" ]; then
+            printf 'AWS_SDK_UA_APP_ID=APN_1.1/pc_%s$\n' "$HERMES_PRODUCT_CODE" > /etc/hermes-agent/aws-sdk.env
+            chown root:hermes /etc/hermes-agent/aws-sdk.env
+            chmod 0640 /etc/hermes-agent/aws-sdk.env
+          else
+            rm -f /etc/hermes-agent/aws-sdk.env
+          fi
+
+          systemctl daemon-reload
+          systemctl enable --now hermes-agent-firstboot.service
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-hermes-agent"
+        - Key: Application
+          Value: Hermes Agent
+        - !If
+          - HasProductCode
+          - Key: aws-apn-id
+            Value: !Sub "pc:${ProductCode}"
+          - !Ref AWS::NoValue
+
+Outputs:
+  InstanceId:
+    Description: Hermes Agent EC2 instance ID.
+    Value: !Ref HermesInstance
+
+  WebUrl:
+    Description: Hermes Agent Web UI URL.
+    Value: !Sub "http://${HermesInstance.PublicIp}:8080"
+
+  SetupTokenCommand:
+    Description: SSM command to read the first boot setup token.
+    Value: !Sub "aws ssm send-command --region ${AWS::Region} --instance-ids ${HermesInstance} --document-name AWS-RunShellScript --parameters commands='sudo cat /etc/hermes-agent/setup-token'"
